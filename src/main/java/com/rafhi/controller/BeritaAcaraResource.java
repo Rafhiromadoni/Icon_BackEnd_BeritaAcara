@@ -1,13 +1,6 @@
 package com.rafhi.controller;
 
-import com.lowagie.text.*;
-import com.lowagie.text.pdf.*;
-import com.rafhi.dto.BeritaAcaraRequest;
-import com.rafhi.dto.Fitur;
-import jakarta.ws.rs.*;
-import jakarta.ws.rs.core.Response;
-
-import java.awt.*;
+import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -15,6 +8,29 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.List;
 import java.util.Locale;
+
+import com.lowagie.text.Chunk;
+import com.lowagie.text.Document;
+import com.lowagie.text.Element;
+import com.lowagie.text.Font;
+import com.lowagie.text.FontFactory;
+import com.lowagie.text.Image;
+import com.lowagie.text.PageSize;
+import com.lowagie.text.Paragraph;
+import com.lowagie.text.Phrase;
+import com.lowagie.text.Rectangle; // ✅ dipertahankan jika kamu gunakan background/tabel
+import com.lowagie.text.pdf.PdfPCell;
+import com.lowagie.text.pdf.PdfPTable;
+import com.lowagie.text.pdf.PdfWriter;
+import com.rafhi.dto.BeritaAcaraRequest;
+import com.rafhi.dto.Fitur;
+
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Response;
+
 
 @Path("/berita-acara")
 @Produces("application/pdf")
