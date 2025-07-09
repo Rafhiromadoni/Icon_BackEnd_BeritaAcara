@@ -1,19 +1,28 @@
+// src/main/java/com/rafhi/dto/BeritaAcaraRequest.java
 package com.rafhi.dto;
 
 import java.util.List;
 
 public class BeritaAcaraRequest {
-    public String jenisBeritaAcara; // UAT / Deployment
-    public String kategoriAplikasi; // Web / Portal
-    public String tipeRequest;      // Change Request / Job Request
+    // Info Umum
+    public String jenisBeritaAcara; // UAT atau Deployment
+    public String kategoriAplikasi;
+    public String tipeRequest;
     public String nomorBA;
     public String tahun;
-    public String nomorSuratRequest;
-    public String tanggalSuratRequest;
-    public String tanggalPelaksanaan;
     public String judulPekerjaan;
 
+    // Info Rujukan
+    public String nomorSuratRequest;
+    public String tanggalSuratRequest;
+    public String nomorBaUat;           // Opsional: Untuk referensi di BA Deployment
+
+    // Info Tambahan
+    public String namaAplikasiSpesifik; // Opsional: Untuk judul 2 baris
+    public String tahap;                // Opsional: ex: "tahap I"
+    public String tanggalPelaksanaan;
+    
+    // Konten Dinamis
     public List<Fitur> fiturList;
-    public String namaPenandatangan;
-    public String jabatanPenandatangan;
+    public List<Signatory> signatoryList;
 }
