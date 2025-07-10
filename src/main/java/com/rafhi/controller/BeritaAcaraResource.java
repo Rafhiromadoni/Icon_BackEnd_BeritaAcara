@@ -201,6 +201,26 @@ public class BeritaAcaraResource {
             doc.add(mengetahuiTable);
         }
 
+        if (!utamaList.isEmpty()) {
+            PdfPTable utamaTable = new PdfPTable(utamaList.size()); // Sekarang dijamin tidak akan nol
+            utamaTable.setWidthPercentage(100f);
+            utamaTable.setSpacingBefore(spacingAfter);
+
+            for (Signatory s : utamaList) {
+                utamaTable.addCell(getCell(s.perusahaan, Element.ALIGN_CENTER, fontIsi, false));
+            }
+            for (Signatory s : utamaList) {
+                PdfPCell namaCell = getCell(s.nama, Element.ALIGN_CENTER, fontIsi, false);
+                namaCell.setFixedHeight(60f); // Memberi ruang untuk tanda tangan
+                namaCell.setVerticalAlignment(Element.ALIGN_BOTTOM);
+                utamaTable.addCell(namaCell);
+            }
+            for (Signatory s : utamaList) {
+                utamaTable.addCell(getCell(s.jabatan, Element.ALIGN_CENTER, fontIsi, false));
+            }
+            doc.add(utamaTable);
+        }
+
         PdfPTable utamaTable = new PdfPTable(utamaList.size());
         utamaTable.setWidthPercentage(100f);
         utamaTable.setSpacingBefore(spacingAfter);
@@ -221,7 +241,7 @@ public class BeritaAcaraResource {
 
         doc.close();
         return Response.ok(out.toByteArray())
-                .header("Content-Disposition", "attachment; filename=berita-acara-" + request.nomorBA + ".pdf")
+                .header("Content-Disposition", "inline; filename=berita-acara-" + request.nomorBA + ".pdf")
                 .build();
     }
 
