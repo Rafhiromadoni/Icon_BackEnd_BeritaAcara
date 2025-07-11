@@ -25,4 +25,8 @@ public class BeritaAcaraRequest {
     // Konten Dinamis
     public List<Fitur> fiturList;
     public List<Signatory> signatoryList;
+
+    public int jumlahKolomTtd = 2;          // default 2, bisa 3
+    public String labelTengah;              // contoh: "Mengetahui"
+    public boolean fiturListIsNested = false; // untuk fitur UAT panjang
 }
