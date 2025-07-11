@@ -1,270 +1,178 @@
-// src/main/java/com/rafhi/controller/BeritaAcaraResource.java
 package com.rafhi.controller;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.TextStyle;
-import java.util.List;
-import java.util.Locale;
-
-import com.lowagie.text.Chunk;
-import com.lowagie.text.Document;
-import com.lowagie.text.Element;
-import com.lowagie.text.Font;
-import com.lowagie.text.FontFactory;
-import com.lowagie.text.Image;
-import com.lowagie.text.PageSize;
-import com.lowagie.text.Paragraph;
-import com.lowagie.text.Phrase;
-import com.lowagie.text.Rectangle;
-import com.lowagie.text.pdf.PdfPCell;
-import com.lowagie.text.pdf.PdfPTable;
-import com.lowagie.text.pdf.PdfWriter;
 import com.rafhi.dto.BeritaAcaraRequest;
 import com.rafhi.dto.Fitur;
 import com.rafhi.dto.Signatory;
-
+import com.rafhi.helper.DateToWordsHelper;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.ResponseBuilder;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+import org.apache.poi.xwpf.usermodel.XWPFRun;
+import org.apache.poi.xwpf.usermodel.XWPFTable;
+import org.apache.poi.xwpf.usermodel.XWPFTableCell;
+import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 
 @Path("/berita-acara")
-@Produces("application/pdf")
 @Consumes("application/json")
 public class BeritaAcaraResource {
 
     @POST
-    @Path("/generate")
-    public Response generateBeritaAcara(BeritaAcaraRequest request) throws Exception {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        Document doc = new Document(PageSize.A4, 36, 36, 36, 36); // Margin: kiri, kanan, atas, bawah
-        PdfWriter.getInstance(doc, out);
-        doc.open();
+    @Path("/generate-docx")
+    @Produces("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    public Response generateDocx(BeritaAcaraRequest request) throws Exception {
 
-        // 1. Definisikan Font dan Spacing
-        Font fontJudul = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12);
-        Font fontIsi = FontFactory.getFont(FontFactory.HELVETICA, 11);
-        Font fontIsiBold = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11);
-        float spacingAfter = 12f;
+        String templateFileName = "UAT".equalsIgnoreCase(request.jenisBeritaAcara)
+                ? "template_uat.docx"
+                : "template_deploy.docx";
 
-        // 2. Tambahkan Logo Header
-        PdfPTable headerTable = new PdfPTable(2);
-        headerTable.setWidthPercentage(100);
-        
-        // Coba muat logo dari resources
-        try (InputStream plnIs = getClass().getResourceAsStream("/images/iconplus_logo.png");
-             InputStream iconIs = getClass().getResourceAsStream("/images/pln_logo.png")) {
+        String templatePath = "/templates/" + templateFileName;
+        InputStream templateInputStream = getClass().getResourceAsStream(templatePath);
+
+        if (templateInputStream == null) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                           .entity("Template file not found at path: " + templatePath)
+                           .build();
+        }
+
+        try (XWPFDocument document = new XWPFDocument(templateInputStream)) {
             
-            if (iconIs != null) {
-                Image iconLogo = Image.getInstance(iconIs.readAllBytes());
-                iconLogo.scaleToFit(100, 50);
-                PdfPCell iconCell = new PdfPCell(iconLogo);
-                iconCell.setBorder(Rectangle.NO_BORDER);
-                iconCell.setHorizontalAlignment(Element.ALIGN_LEFT);
-                headerTable.addCell(iconCell);
+            Map<String, String> replacements = buildReplacementsMap(request);
+
+            // Ganti placeholder di paragraf
+            for (XWPFParagraph p : document.getParagraphs()) {
+                replaceInParagraph(p, replacements);
             }
 
-            if (plnIs != null) {
-                Image plnLogo = Image.getInstance(plnIs.readAllBytes());
-                plnLogo.scaleToFit(100, 50);
-                PdfPCell plnCell = new PdfPCell(plnLogo);
-                plnCell.setBorder(Rectangle.NO_BORDER);
-                plnCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
-                headerTable.addCell(plnCell);
+            // Ganti placeholder di tabel
+            for (XWPFTable tbl : document.getTables()) {
+                for (XWPFTableRow row : tbl.getRows()) {
+                    for (XWPFTableCell cell : row.getTableCells()) {
+                        for (XWPFParagraph p : cell.getParagraphs()) {
+                            replaceInParagraph(p, replacements);
+                        }
+                    }
+                }
             }
-            doc.add(headerTable);
-        } catch (Exception e) {
-            // Jika logo tidak ditemukan, cetak pesan error di console
-            System.err.println("Gagal memuat logo: " + e.getMessage());
+            
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            document.write(out);
+
+            ResponseBuilder response = Response.ok(new ByteArrayInputStream(out.toByteArray()));
+            response.header("Content-Disposition", "inline; filename=BA-" + request.nomorBA + ".docx");
+            return response.build();
         }
-
-        // 3. Tata Ulang Judul dengan Tabel
-        Paragraph judul = new Paragraph("BERITA ACARA " + request.jenisBeritaAcara.toUpperCase(), fontJudul);
-        judul.setAlignment(Element.ALIGN_CENTER);
-        judul.setSpacingAfter(2f);
-        doc.add(judul);
-
-        Paragraph subJudul = new Paragraph("PERUBAHAN " + request.kategoriAplikasi.toUpperCase(), fontJudul);
-        subJudul.setAlignment(Element.ALIGN_CENTER);
-        doc.add(subJudul);
-
-        if (request.namaAplikasiSpesifik != null && !request.namaAplikasiSpesifik.isEmpty()) {
-            Paragraph appName = new Paragraph(request.namaAplikasiSpesifik.toUpperCase(), fontJudul);
-            appName.setAlignment(Element.ALIGN_CENTER);
-            doc.add(appName);
-        }
-
-        Paragraph nomor = new Paragraph("No. " + request.nomorBA, fontIsi);
-        nomor.setAlignment(Element.ALIGN_CENTER);
-        nomor.setSpacingAfter(spacingAfter);
-        doc.add(nomor);
-
-        // --- Logika Kondisional untuk Konten ---
-        String jenisBA = request.jenisBeritaAcara;
-
-        if ("UAT".equalsIgnoreCase(jenisBA)) {
-            String kalimatPembuka = "Pada hari ini " + getTanggalFormal(request.tanggalPelaksanaan) +
-                    ", telah dibuat Berita Acara " + request.jenisBeritaAcara +
-                    (request.tahap != null ? " " + request.tahap : "") +
-                    " terhadap permohonan perubahan aplikasi merujuk pada " +
-                    request.tipeRequest + " dengan nomor surat " + request.nomorSuratRequest +
-                    " tanggal " + getTanggalFormal(request.tanggalSuratRequest) +
-                    " perihal \"" + request.judulPekerjaan + "\".";
-            Paragraph p1 = new Paragraph(kalimatPembuka, fontIsi);
-            p1.setSpacingAfter(spacingAfter);
-            doc.add(p1);
-
-            // 4. Implementasi Tabel Aktivitas (dengan styling)
-            PdfPTable table = new PdfPTable(new float[]{1, 5, 2, 3}); // Proporsi lebar kolom
-            table.setWidthPercentage(100f);
-            table.addCell(getCell("No", Element.ALIGN_CENTER, fontIsiBold, true));
-            table.addCell(getCell("Kegiatan", Element.ALIGN_CENTER, fontIsiBold, true));
-            table.addCell(getCell("Status", Element.ALIGN_CENTER, fontIsiBold, true));
-            table.addCell(getCell("Keterangan", Element.ALIGN_CENTER, fontIsiBold, true));
-
-            int i = 1;
-            for (Fitur f : request.fiturList) {
-                table.addCell(getCell(String.valueOf(i++), Element.ALIGN_CENTER, fontIsi, true));
-                table.addCell(getCell(f.deskripsi, Element.ALIGN_LEFT, fontIsi, true));
-                table.addCell(getCell(f.status, Element.ALIGN_CENTER, fontIsi, true));
-                table.addCell(getCell(f.catatan != null ? f.catatan : "-", Element.ALIGN_CENTER, fontIsi, true));
-            }
-            doc.add(table);
-
-        } else if ("Deployment".equalsIgnoreCase(jenisBA)) {
-            String kalimatPembuka = "Pada hari ini " + getTanggalFormal(request.tanggalPelaksanaan) +
-                    ", telah dibuat Berita Acara Penyebaran (" + request.jenisBeritaAcara + ")" +
-                    (request.tahap != null ? " " + request.tahap : "") +
-                    " fitur tambahan berdasarkan BA UAT nomor " + request.nomorBaUat +
-                    " tentang permohonan perubahan aplikasi merujuk pada " +
-                    request.tipeRequest + " dengan nomor surat " + request.nomorSuratRequest +
-                    " tanggal " + getTanggalFormal(request.tanggalSuratRequest) +
-                    " perihal \"" + request.judulPekerjaan + "\".";
-            Paragraph p1 = new Paragraph(kalimatPembuka, fontIsi);
-            p1.setSpacingAfter(spacingAfter);
-            doc.add(p1);
-
-            PdfPTable table = new PdfPTable(new float[]{1, 7, 2}); // Proporsi lebar kolom
-            table.setWidthPercentage(100f);
-            table.addCell(getCell("No.", Element.ALIGN_CENTER, fontIsiBold, true));
-            table.addCell(getCell("Aktifitas", Element.ALIGN_CENTER, fontIsiBold, true));
-            table.addCell(getCell("Status", Element.ALIGN_CENTER, fontIsiBold, true));
-
-            table.addCell(getCell("1.", Element.ALIGN_CENTER, fontIsi, true));
-            table.addCell(getCell("Pengecekan validasi sesuai dengan UAT", Element.ALIGN_LEFT, fontIsi, true));
-            table.addCell(getCell("OK", Element.ALIGN_CENTER, fontIsi, true));
-            table.addCell(getCell("2.", Element.ALIGN_CENTER, fontIsi, true));
-            table.addCell(getCell("Penyebaran / deployment fitur baru", Element.ALIGN_LEFT, fontIsi, true));
-            table.addCell(getCell("OK", Element.ALIGN_CENTER, fontIsi, true));
-            table.addCell(getCell("3.", Element.ALIGN_CENTER, fontIsi, true));
-            table.addCell(getCell("Pengujian hasil proses Penyebaran/ deployment", Element.ALIGN_LEFT, fontIsi, true));
-            table.addCell(getCell("OK", Element.ALIGN_CENTER, fontIsi, true));
-            doc.add(table);
-        }
-
-        // --- Kalimat Penutup ---
-        Paragraph pPenutup = new Paragraph("Demikian Berita Acara ini dibuat untuk dipergunakan sebagaimana mestinya.", fontIsi);
-        pPenutup.setSpacingBefore(spacingAfter);
-        pPenutup.setSpacingAfter(spacingAfter);
-        doc.add(pPenutup);
-
-        // 5. Refinement Tabel Tanda Tangan
-        List<Signatory> mengetahuiList = request.signatoryList.stream()
-                .filter(s -> "mengetahui".equalsIgnoreCase(s.tipe))
-                .toList();
-        List<Signatory> utamaList = request.signatoryList.stream()
-                .filter(s -> "utama".equalsIgnoreCase(s.tipe))
-                .toList();
-
-        if (!mengetahuiList.isEmpty()) {
-            doc.add(new Paragraph("Mengetahui,", fontIsi));
-            PdfPTable mengetahuiTable = new PdfPTable(mengetahuiList.size());
-            mengetahuiTable.setWidthPercentage(100f);
-            mengetahuiTable.setSpacingBefore(4f);
-            for (Signatory s : mengetahuiList) {
-                mengetahuiTable.addCell(getCell(s.perusahaan, Element.ALIGN_CENTER, fontIsi, false));
-            }
-            for (Signatory s : mengetahuiList) {
-                PdfPCell namaCell = getCell(s.nama, Element.ALIGN_CENTER, fontIsi, false);
-                namaCell.setFixedHeight(60f); // Memberi ruang untuk tanda tangan
-                namaCell.setVerticalAlignment(Element.ALIGN_BOTTOM);
-                mengetahuiTable.addCell(namaCell);
-            }
-            for (Signatory s : mengetahuiList) {
-                mengetahuiTable.addCell(getCell(s.jabatan, Element.ALIGN_CENTER, fontIsi, false));
-            }
-            doc.add(mengetahuiTable);
-        }
-
-        if (!utamaList.isEmpty()) {
-            PdfPTable utamaTable = new PdfPTable(utamaList.size()); // Sekarang dijamin tidak akan nol
-            utamaTable.setWidthPercentage(100f);
-            utamaTable.setSpacingBefore(spacingAfter);
-
-            for (Signatory s : utamaList) {
-                utamaTable.addCell(getCell(s.perusahaan, Element.ALIGN_CENTER, fontIsi, false));
-            }
-            for (Signatory s : utamaList) {
-                PdfPCell namaCell = getCell(s.nama, Element.ALIGN_CENTER, fontIsi, false);
-                namaCell.setFixedHeight(60f); // Memberi ruang untuk tanda tangan
-                namaCell.setVerticalAlignment(Element.ALIGN_BOTTOM);
-                utamaTable.addCell(namaCell);
-            }
-            for (Signatory s : utamaList) {
-                utamaTable.addCell(getCell(s.jabatan, Element.ALIGN_CENTER, fontIsi, false));
-            }
-            doc.add(utamaTable);
-        }
-
-        PdfPTable utamaTable = new PdfPTable(utamaList.size());
-        utamaTable.setWidthPercentage(100f);
-        utamaTable.setSpacingBefore(spacingAfter);
-
-        for (Signatory s : utamaList) {
-            utamaTable.addCell(getCell(s.perusahaan, Element.ALIGN_CENTER, fontIsi, false));
-        }
-        for (Signatory s : utamaList) {
-            PdfPCell namaCell = getCell(s.nama, Element.ALIGN_CENTER, fontIsi, false);
-            namaCell.setFixedHeight(60f); // Memberi ruang untuk tanda tangan
-            namaCell.setVerticalAlignment(Element.ALIGN_BOTTOM);
-            utamaTable.addCell(namaCell);
-        }
-        for (Signatory s : utamaList) {
-            utamaTable.addCell(getCell(s.jabatan, Element.ALIGN_CENTER, fontIsi, false));
-        }
-        doc.add(utamaTable);
-
-        doc.close();
-        return Response.ok(out.toByteArray())
-                .header("Content-Disposition", "inline; filename=berita-acara-" + request.nomorBA + ".pdf")
-                .build();
     }
 
-    private PdfPCell getCell(String text, int alignment, Font font, boolean border) {
-        PdfPCell cell = new PdfPCell(new Phrase(text, font));
-        cell.setHorizontalAlignment(alignment);
-        cell.setPadding(5f); // Memberi padding pada semua sel
-        if (!border) {
-            cell.setBorder(Rectangle.NO_BORDER);
-        }
-        return cell;
-    }
+    private Map<String, String> buildReplacementsMap(BeritaAcaraRequest request) {
+        Map<String, String> replacements = new HashMap<>();
+        DateToWordsHelper baDate = new DateToWordsHelper(request.tanggalBA);
+        DateToWordsHelper pengerjaanDate = new DateToWordsHelper(request.tanggalPengerjaan);
 
-    private String getTanggalFormal(String dateStr) {
-        try {
-            DateTimeFormatter inputFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-            LocalDate date = LocalDate.parse(dateStr, inputFormat);
-            DayOfWeek day = date.getDayOfWeek();
-            String hari = day.getDisplayName(TextStyle.FULL, new Locale("id", "ID"));
-            DateTimeFormatter outputFormat = DateTimeFormatter.ofPattern("dd MMMM yyyy", new Locale("id", "ID"));
-            return hari + ", " + date.format(outputFormat);
-        } catch (Exception e) {
-            return dateStr;
+        Signatory utama1 = request.signatoryList.stream().filter(s -> "utama1".equals(s.tipe)).findFirst().orElse(new Signatory());
+        Signatory utama2 = request.signatoryList.stream().filter(s -> "utama2".equals(s.tipe)).findFirst().orElse(new Signatory());
+        Signatory mengetahui = request.signatoryList.stream().filter(s -> "mengetahui".equals(s.tipe)).findFirst().orElse(new Signatory());
+        Fitur fitur = (request.fiturList != null && !request.fiturList.isEmpty()) ? request.fiturList.get(0) : new Fitur();
+
+        replacements.put("${jenisRequest}", "Change Request".equalsIgnoreCase(request.jenisRequest) ? "PERUBAHAN" : "PENGEMBANGAN");
+        replacements.put("${namaAplikasiSpesifik}", Objects.toString(request.namaAplikasiSpesifik, ""));
+        replacements.put("${nomorBA}", Objects.toString(request.nomorBA, ""));
+        replacements.put("${judulPekerjaan}", Objects.toString(request.judulPekerjaan, ""));
+        replacements.put("${tahap}", Objects.toString(request.tahap, ""));
+        replacements.put("${nomorSuratRequest}", Objects.toString(request.nomorSuratRequest, ""));
+        replacements.put("${tanggalSuratRequest}", Objects.toString(request.tanggalSuratRequest, ""));
+        replacements.put("${nomorBaUat}", Objects.toString(request.nomorBaUat, ""));
+
+        replacements.put("${hariBATerbilang}", baDate.getDayOfWeek());
+        replacements.put("${tanggalBATerbilang}", baDate.getDay());
+        replacements.put("${bulanBATerbilang}", baDate.getMonth());
+        replacements.put("${tahunBATerbilang}", baDate.getYear());
+        replacements.put("${tanggalBA}", baDate.getFullDate());
+            
+        replacements.put("${hariPengerjaanTerbilang}", pengerjaanDate.getDayOfWeek());
+        replacements.put("${tanggalPengerjaanTerbilang}", pengerjaanDate.getDay());
+        replacements.put("${bulanPengerjaanTerbilang}", pengerjaanDate.getMonth());
+        replacements.put("${tahunPengerjaanTerbilang}", pengerjaanDate.getYear());
+        replacements.put("${tanggalPengerjaan}", pengerjaanDate.getFullDate());
+        
+        replacements.put("${fitur.deskripsi}", Objects.toString(fitur.deskripsi, ""));
+        replacements.put("${fitur.status}", Objects.toString(fitur.status, ""));
+        replacements.put("${fitur.keterangan}", Objects.toString(fitur.catatan, ""));
+
+        replacements.put("${signatory.utama1.perusahaan}", Objects.toString(utama1.perusahaan, ""));
+        replacements.put("${signatory.utama1.nama}", Objects.toString(utama1.nama, ""));
+        replacements.put("${signatory.utama1.jabatan}", Objects.toString(utama1.jabatan, ""));
+        replacements.put("${signatory.utama2.perusahaan}", Objects.toString(utama2.perusahaan, ""));
+        replacements.put("${signatory.utama2.nama}", Objects.toString(utama2.nama, ""));
+        replacements.put("${signatory.utama2.jabatan}", Objects.toString(utama2.jabatan, ""));
+        replacements.put("${signatory.mengetahui.perusahaan}", Objects.toString(mengetahui.perusahaan, ""));
+        replacements.put("${signatory.mengetahui.nama}", Objects.toString(mengetahui.nama, ""));
+        replacements.put("${signatory.mengetahui.jabatan}", Objects.toString(mengetahui.jabatan, ""));
+        
+        return replacements;
+    }
+    
+    /**
+     * Metode pengganti placeholder final yang dapat menangani placeholder terpisah
+     * dan menjaga style (bold, italic, etc.).
+     */
+    private void replaceInParagraph(XWPFParagraph paragraph, Map<String, String> replacements) {
+        String paragraphText = paragraph.getText();
+        if (paragraphText == null || !paragraphText.contains("$")) {
+            return;
+        }
+
+        for (Map.Entry<String, String> entry : replacements.entrySet()) {
+            String placeholder = entry.getKey();
+            if (paragraph.getText().contains(placeholder)) {
+                String replacement = entry.getValue();
+
+                List<XWPFRun> runs = paragraph.getRuns();
+                for (int i = 0; i < runs.size(); i++) {
+                    XWPFRun run = runs.get(i);
+                    String text = run.getText(0);
+                    if (text == null) continue;
+
+                    if (text.contains(placeholder)) {
+                        text = text.replace(placeholder, replacement);
+                        run.setText(text, 0);
+                        continue;
+                    }
+
+                    // Logika untuk menangani placeholder yang terpisah antar run
+                    if (text.contains("$") && (i + 1 < runs.size())) {
+                        StringBuilder placeholderBuilder = new StringBuilder(text);
+                        for (int j = i + 1; j < runs.size(); j++) {
+                            XWPFRun nextRun = runs.get(j);
+                            String nextRunText = nextRun.getText(0);
+                            if (nextRunText == null) continue;
+                            placeholderBuilder.append(nextRunText);
+                            if (placeholderBuilder.toString().equals(placeholder)) {
+                                run.setText(replacement, 0);
+                                // Hapus run yang sudah digabungkan
+                                for (int k = j; k > i; k--) {
+                                    paragraph.removeRun(k);
+                                }
+                                break;
+                            }
+                            if (!placeholder.startsWith(placeholderBuilder.toString())) {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

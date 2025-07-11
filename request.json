@@ -1,7 +1,7 @@
 {
   "jenisBeritaAcara": "User Acceptance Test (UAT)",
   "kategoriAplikasi": "Aplikasi Web Portal",
-  "tipeRequest": "Change Request",
+  "jenisRequest": "Change Request",
   "nomorBA": "4618",
   "tahun": "2025",
   "nomorSuratRequest": "2357/STI.01.02/F01000402/2025",
