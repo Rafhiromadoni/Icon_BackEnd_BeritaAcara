@@ -24,4 +24,5 @@ public class BeritaAcaraRequest {
     // Daftar dinamis
     public List<Fitur> fiturList;
     public List<Signatory> signatoryList;
+    
 }
