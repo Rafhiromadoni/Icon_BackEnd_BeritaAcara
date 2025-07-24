@@ -15,6 +15,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +36,7 @@ import org.apache.poi.xwpf.usermodel.XWPFTable;
 import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 import org.apache.poi.xwpf.usermodel.XWPFNumbering;
+import org.apache.poi.xwpf.usermodel.LineSpacingRule;
 import org.apache.poi.xwpf.usermodel.XWPFAbstractNum;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTAbstractNum;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTLvl;
@@ -50,10 +52,6 @@ import java.time.LocalDateTime;
 import com.rafhi.dto.HistoryResponseDTO;
 import java.util.stream.Collectors;
 import jakarta.ws.rs.PathParam;
-
-// Impor untuk konversi PDF
-// import org.docx4j.Docx4J;
-// import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 
 @Path("/berita-acara")
 @ApplicationScoped
@@ -73,17 +71,14 @@ public class BeritaAcaraResource {
         if ("Deployment".equalsIgnoreCase(request.jenisBeritaAcara)) {
             templateFileName = "template_deploy.docx";
         } else { // Asumsi jenisnya adalah UAT
-            // Hitung jumlah penandatangan dengan tipe "utama"
-            // long countUtama = request.signatoryList.stream()
-            long countUtama = request.signatoryList.stream().filter(s -> s.tipe.startsWith("utama")).count();
-                // .filter(s -> "utama".equals(s.tipe))
-                // .count();
+            // Hitung jumlah penandatangan dengan tipe "utama" 
+            long countUtama = request.signatoryList.stream().filter(s -> s.tipe.startsWith("penandatangan")).count();
                 
             if (countUtama == 3) {
                 templateFileName = "template_uat_signatory4.docx"; 
             } else if (countUtama == 4) {
                 templateFileName = "template_uat_signatory5.docx";
-            } else { // default UAT
+            } else { // default jml 2
                 templateFileName = "template_uat.docx";
             }
         }
@@ -170,42 +165,17 @@ public class BeritaAcaraResource {
         response.header("Content-Disposition", "inline; filename=BA-" + history.nomorBA + ".docx");
         return response.build();
     }
-
-    // @GET
-    // @Path("/history/{id}/pdf")
-    // @Produces("application/pdf")
-    // @Transactional
-    // public Response getHistoryAsPdf(@PathParam("id") Long id) throws Exception {
-    //     BeritaAcaraHistory history = BeritaAcaraHistory.findById(id);
-    //     if (history == null) {
-    //         return Response.status(Response.Status.NOT_FOUND).build();
-    //     }
-
-    //     // Muat dokumen .docx dari database
-    //     InputStream docxInputStream = new ByteArrayInputStream(history.fileContent);
-    //     WordprocessingMLPackage wordMLPackage = WordprocessingMLPackage.load(docxInputStream);
-
-    //     // Siapkan output stream untuk PDF
-    //     ByteArrayOutputStream pdfOutputStream = new ByteArrayOutputStream();
-
-    //     // Lakukan konversi
-    //     Docx4J.toPDF(wordMLPackage, pdfOutputStream);
-
-    //     // Kirim hasil PDF sebagai respons
-    //     ResponseBuilder response = Response.ok(new ByteArrayInputStream(pdfOutputStream.toByteArray()));
-    //     response.header("Content-Disposition", "inline; filename=BA-" + history.nomorBA + ".pdf");
-    //     return response.build();
-    // }
     
     private Map<String, String> buildReplacementsMap(BeritaAcaraRequest request) {
         Map<String, String> replacements = new HashMap<>();
         DateToWordsHelper baDate = new DateToWordsHelper(request.tanggalBA);
         DateToWordsHelper pengerjaanDate = new DateToWordsHelper(request.tanggalPengerjaan);
+        DateToWordsHelper reqDate = new DateToWordsHelper(request.tanggalSuratRequest);
 
-        Signatory utama1 = request.signatoryList.stream().filter(s -> "utama1".equals(s.tipe)).findFirst().orElse(new Signatory());
-        Signatory utama2 = request.signatoryList.stream().filter(s -> "utama2".equals(s.tipe)).findFirst().orElse(new Signatory());
-        Signatory utama3 = request.signatoryList.stream().filter(s -> "utama3".equals(s.tipe)).findFirst().orElse(new Signatory());
-        Signatory utama4 = request.signatoryList.stream().filter(s -> "utama4".equals(s.tipe)).findFirst().orElse(new Signatory());
+        Signatory penandatangan1 = request.signatoryList.stream().filter(s -> "penandatangan1".equals(s.tipe)).findFirst().orElse(new Signatory());
+        Signatory penandatangan2 = request.signatoryList.stream().filter(s -> "penandatangan2".equals(s.tipe)).findFirst().orElse(new Signatory());
+        Signatory penandatangan3 = request.signatoryList.stream().filter(s -> "penandatangan3".equals(s.tipe)).findFirst().orElse(new Signatory());
+        Signatory penandatangan4 = request.signatoryList.stream().filter(s -> "penandatangan4".equals(s.tipe)).findFirst().orElse(new Signatory());
         Signatory mengetahui = request.signatoryList.stream().filter(s -> "mengetahui".equals(s.tipe)).findFirst().orElse(new Signatory());
         Fitur fitur = (request.fiturList != null && !request.fiturList.isEmpty()) ? request.fiturList.get(0) : new Fitur();
 
@@ -215,7 +185,7 @@ public class BeritaAcaraResource {
         replacements.put("${judulPekerjaan}", Objects.toString(request.judulPekerjaan, ""));
         replacements.put("${tahap}", Objects.toString(request.tahap, ""));
         replacements.put("${nomorSuratRequest}", Objects.toString(request.nomorSuratRequest, ""));
-        replacements.put("${tanggalSuratRequest}", Objects.toString(request.tanggalSuratRequest, ""));
+        replacements.put("${tanggalSuratRequest}", reqDate.getFormattedDate());
         replacements.put("${nomorBaUat}", Objects.toString(request.nomorBaUat, ""));
 
         replacements.put("${hariBATerbilang}", baDate.getDayOfWeek());
@@ -234,46 +204,37 @@ public class BeritaAcaraResource {
         replacements.put("${fitur.status}", Objects.toString(fitur.status, ""));
         replacements.put("${fitur.keterangan}", Objects.toString(fitur.catatan, ""));
 
-        // replacements.put("${signatory.utama1.perusahaan}", Objects.toString(utama1.perusahaan, ""));
         replacements.put(
-            "${signatory.utama1.perusahaan}",
-            Objects.toString(utama1.perusahaan, "")
-                .replace("<br>", "\n")
+            "${signatory.penandatangan1.perusahaan}",
+            Objects.toString(penandatangan1.perusahaan, "").replace("<br>", "\n")
         );
-        replacements.put("${signatory.utama1.nama}", Objects.toString(utama1.nama, ""));
-        replacements.put("${signatory.utama1.jabatan}", Objects.toString(utama1.jabatan, ""));
-        // replacements.put("${signatory.utama2.perusahaan}", Objects.toString(utama2.perusahaan, ""));
-        replacements.put(
-            "${signatory.utama2.perusahaan}",
-            Objects.toString(utama2.perusahaan, "")
-                .replace("<br>", "\n")
-        );
-        replacements.put("${signatory.utama2.nama}", Objects.toString(utama2.nama, ""));
-        replacements.put("${signatory.utama2.jabatan}", Objects.toString(utama2.jabatan, ""));
+        replacements.put("${signatory.penandatangan1.nama}", Objects.toString(penandatangan1.nama, ""));
+        replacements.put("${signatory.penandatangan1.jabatan}", Objects.toString(penandatangan1.jabatan, ""));
 
-        // replacements.put("${signatory.utama3.perusahaan}", Objects.toString(utama3.perusahaan, ""));
         replacements.put(
-            "${signatory.utama3.perusahaan}",
-            Objects.toString(utama3.perusahaan, "")
-                .replace("<br>", "\n")
+            "${signatory.penandatangan2.perusahaan}",
+            Objects.toString(penandatangan2.perusahaan, "").replace("<br>", "\n")
         );
-        replacements.put("${signatory.utama3.nama}", Objects.toString(utama3.nama, ""));
-        replacements.put("${signatory.utama3.jabatan}", Objects.toString(utama3.jabatan, ""));
+        replacements.put("${signatory.penandatangan2.nama}", Objects.toString(penandatangan2.nama, ""));
+        replacements.put("${signatory.penandatangan2.jabatan}", Objects.toString(penandatangan2.jabatan, ""));
 
-        // replacements.put("${signatory.utama4.perusahaan}", Objects.toString(utama4.perusahaan, ""));
         replacements.put(
-            "${signatory.utama4.perusahaan}",
-            Objects.toString(utama4.perusahaan, "")
-                .replace("<br>", "\n")
+            "${signatory.penandatangan3.perusahaan}",
+            Objects.toString(penandatangan3.perusahaan, "").replace("<br>", "\n")
         );
-        replacements.put("${signatory.utama4.nama}", Objects.toString(utama4.nama, ""));
-        replacements.put("${signatory.utama4.jabatan}", Objects.toString(utama4.jabatan, ""));
+        replacements.put("${signatory.penandatangan3.nama}", Objects.toString(penandatangan3.nama, ""));
+        replacements.put("${signatory.penandatangan3.jabatan}", Objects.toString(penandatangan3.jabatan, ""));
 
-        // replacements.put("${signatory.mengetahui.perusahaan}", Objects.toString(mengetahui.perusahaan, ""));
+        replacements.put(
+            "${signatory.penandatangan4.perusahaan}",
+            Objects.toString(penandatangan4.perusahaan, "").replace("<br>", "\n")
+        );
+        replacements.put("${signatory.penandatangan4.nama}", Objects.toString(penandatangan4.nama, ""));
+        replacements.put("${signatory.penandatangan4.jabatan}", Objects.toString(penandatangan4.jabatan, ""));
+
         replacements.put(
             "${signatory.mengetahui.perusahaan}",
-            Objects.toString(mengetahui.perusahaan, "")
-                .replace("<br>", "\n")
+            Objects.toString(mengetahui.perusahaan, "").replace("<br>", "\n")
         );
         replacements.put("${signatory.mengetahui.nama}", Objects.toString(mengetahui.nama, ""));
         replacements.put("${signatory.mengetahui.jabatan}", Objects.toString(mengetahui.jabatan, ""));
@@ -305,52 +266,112 @@ public class BeritaAcaraResource {
         }
     }
 
+    // private void replaceInParagraph(XWPFParagraph paragraph, Map<String, String> replacements) {
+    //     String paragraphText = paragraph.getText();
+    //     if (paragraphText == null || !paragraphText.contains("$")) {
+    //         return;
+    //     }
+
+    //     for (Map.Entry<String, String> entry : replacements.entrySet()) {
+    //         String placeholder = entry.getKey();
+    //         if (!paragraph.getText().contains(placeholder)) {
+    //             continue;
+    //         }
+
+    //         List<XWPFRun> runs = paragraph.getRuns();
+    //         int startRunIndex = -1, endRunIndex = -1;
+    //         String accumulatedText = "";
+
+    //         // Cari sekuens "run" yang berisi placeholder lengkap
+    //         for (int i = 0; i < runs.size(); i++) {
+    //             String runText = runs.get(i).getText(0);
+    //             if (runText == null) continue;
+                
+    //             accumulatedText += runText;
+    //             if(startRunIndex == -1) {
+    //                 startRunIndex = i;
+    //             }
+
+    //             if (accumulatedText.contains(placeholder)) {
+    //                 endRunIndex = i;
+                    
+    //                 // Lakukan penggantian
+    //                 String newText = accumulatedText.replace(placeholder, entry.getValue());
+    //                 runs.get(startRunIndex).setText(newText, 0);
+
+    //                 // Kosongkan run lain yang terlibat
+    //                 for (int j = startRunIndex + 1; j <= endRunIndex; j++) {
+    //                     runs.get(j).setText("", 0);
+    //                 }
+                    
+    //                 // Ulangi proses untuk placeholder yang sama di paragraf yang sama
+    //                 replaceInParagraph(paragraph, replacements);
+    //                 return;
+    //             }
+
+    //             if (!placeholder.startsWith(accumulatedText)) {
+    //                 accumulatedText = "";
+    //                 startRunIndex = -1;
+    //             }
+    //         }
+    //     }
+    // }
+
     private void replaceInParagraph(XWPFParagraph paragraph, Map<String, String> replacements) {
-        String paragraphText = paragraph.getText();
-        if (paragraphText == null || !paragraphText.contains("$")) {
+        String originalParagraphText = paragraph.getText();
+        if (originalParagraphText == null || !originalParagraphText.contains("$")) {
             return;
         }
 
+        String modifiedText = originalParagraphText;
+        boolean hasReplacements = false;
         for (Map.Entry<String, String> entry : replacements.entrySet()) {
-            String placeholder = entry.getKey();
-            if (!paragraph.getText().contains(placeholder)) {
-                continue;
+            if (modifiedText.contains(entry.getKey())) {
+                modifiedText = modifiedText.replace(entry.getKey(), entry.getValue());
+                hasReplacements = true;
+            }
+        }
+
+        if (hasReplacements) {
+            // Simpan semua style dari run yang ada
+            List<Map<String, Object>> runStyles = new ArrayList<>();
+            for (XWPFRun run : paragraph.getRuns()) {
+                Map<String, Object> style = new HashMap<>();
+                style.put("bold", run.isBold());
+                style.put("italic", run.isItalic());
+                style.put("fontFamily", run.getFontFamily());
+                if (run.getFontSize() != -1) {
+                    style.put("fontSize", run.getFontSize());
+                }
+                runStyles.add(style);
             }
 
-            List<XWPFRun> runs = paragraph.getRuns();
-            int startRunIndex = -1, endRunIndex = -1;
-            String accumulatedText = "";
-
-            // Cari sekuens "run" yang berisi placeholder lengkap
-            for (int i = 0; i < runs.size(); i++) {
-                String runText = runs.get(i).getText(0);
-                if (runText == null) continue;
-                
-                accumulatedText += runText;
-                if(startRunIndex == -1) {
-                    startRunIndex = i;
-                }
-
-                if (accumulatedText.contains(placeholder)) {
-                    endRunIndex = i;
-                    
-                    // Lakukan penggantian
-                    String newText = accumulatedText.replace(placeholder, entry.getValue());
-                    runs.get(startRunIndex).setText(newText, 0);
-
-                    // Kosongkan run lain yang terlibat
-                    for (int j = startRunIndex + 1; j <= endRunIndex; j++) {
-                        runs.get(j).setText("", 0);
+            // Hapus semua run lama
+            while(paragraph.getRuns().size() > 0) {
+                paragraph.removeRun(0);
+            }
+            
+            // Buat run baru dan terapkan style dari run pertama yang asli
+            XWPFRun newRun = paragraph.createRun();
+            if (modifiedText.contains("\n")) {
+                String[] lines = modifiedText.split("\n");
+                for (int i = 0; i < lines.length; i++) {
+                    newRun.setText(lines[i]);
+                    if (i < lines.length - 1) {
+                        newRun.addBreak();
                     }
-                    
-                    // Ulangi proses untuk placeholder yang sama di paragraf yang sama
-                    replaceInParagraph(paragraph, replacements);
-                    return;
                 }
+            } else {
+                newRun.setText(modifiedText);
+            }
 
-                if (!placeholder.startsWith(accumulatedText)) {
-                    accumulatedText = "";
-                    startRunIndex = -1;
+            if (!runStyles.isEmpty()) {
+                Map<String, Object> firstStyle = runStyles.get(0);
+                newRun.setBold((Boolean) firstStyle.getOrDefault("bold", false));
+                newRun.setItalic((Boolean) firstStyle.getOrDefault("italic", false));
+                newRun.setFontFamily((String) firstStyle.get("fontFamily"));
+                if (firstStyle.containsKey("fontSize")) {
+                    newRun.setFontSize((Integer) firstStyle.get("fontSize"));
                 }
             }
         }
@@ -384,19 +405,25 @@ public class BeritaAcaraResource {
                             for (Element element : htmlDoc.body().children()) {
                                 if (element.tagName().equals("p")) {
                                     XWPFParagraph targetParagraph = cell.addParagraph();
+                                    targetParagraph.setSpacingAfter(60);
+                                    targetParagraph.setSpacingBefore(240);
+                                    targetParagraph.setSpacingBetween(1.0, LineSpacingRule.AUTO);
                                     applyRuns(targetParagraph, element, fontFamily, fontSize);
                                 } else if (element.tagName().equals("ul") || element.tagName().equals("ol")) {
                                     BigInteger numId = createNumbering(numbering, element.tagName());
                                     for (Element li : element.select("li")) {
                                         XWPFParagraph listParagraph = cell.addParagraph();
                                         listParagraph.setNumID(numId);
-                                        // **PERBAIKAN: Deteksi dan terapkan level indentasi**
+
+                                        // indentasi
                                         int indentLevel = 0;
                                         if (li.hasClass("ql-indent-1")) indentLevel = 1;
                                         if (li.hasClass("ql-indent-2")) indentLevel = 2;
                                         if (li.hasClass("ql-indent-3")) indentLevel = 3;
-                                        // Tambahkan jika perlu level lebih dalam
                                         
+                                        listParagraph.setSpacingAfter(60);
+                                        listParagraph.setSpacingBefore(60);
+                                        listParagraph.setSpacingBetween(1.0, LineSpacingRule.AUTO);
                                         listParagraph.setNumILvl(BigInteger.valueOf(indentLevel));
                                         // Terapkan style font
                                         applyRuns(listParagraph, li, fontFamily, fontSize);
@@ -451,8 +478,8 @@ public class BeritaAcaraResource {
         } else { // "ol"
             // Definisi untuk ordered list multi-level
             addNumberingLevel(cTAbstractNum, 0, STNumberFormat.DECIMAL, "%1.");
-            addNumberingLevel(cTAbstractNum, 1, STNumberFormat.LOWER_LETTER, "%2.");
-            addNumberingLevel(cTAbstractNum, 2, STNumberFormat.LOWER_ROMAN, "%3.");
+            addNumberingLevel(cTAbstractNum, 1, STNumberFormat.BULLET, "-");
+            addNumberingLevel(cTAbstractNum, 2, STNumberFormat.BULLET, "-");
         }
 
         XWPFAbstractNum abstractNum = new XWPFAbstractNum(cTAbstractNum);
@@ -467,6 +494,33 @@ public class BeritaAcaraResource {
         cTLvl.addNewNumFmt().setVal(format);
         cTLvl.addNewLvlText().setVal(lvlText);
         cTLvl.addNewStart().setVal(BigInteger.valueOf(1));
-        cTLvl.addNewPPr().addNewInd().setLeft(BigInteger.valueOf(310L * (level + 1)));
+
+         // Atur indentasi spesifik untuk setiap level
+        long indentLeft, indentRight, indentHanging;
+        switch (level) {
+            case 0:  // Level pertama
+                indentLeft = 512L;
+                indentRight = 43L; 
+                indentHanging = 360L; 
+                break;
+            case 1:  // Level kedua
+                indentLeft = 945L;
+                indentRight = 43L;
+                indentHanging = 288L; 
+                break;
+            case 2:  // Level ketiga
+                indentLeft = 1200L;
+                indentRight = 43L;
+                indentHanging = 288L;
+                break;
+            default: // Level selanjutnya
+                indentLeft = 1200L;
+                indentRight = 43L;
+                indentHanging = 288L;
+                break;
+        }
+        cTLvl.addNewPPr().addNewInd().setLeft(BigInteger.valueOf(indentLeft));
+        cTLvl.addNewPPr().addNewInd().setRight(BigInteger.valueOf(indentRight));
+        cTLvl.addNewPPr().addNewInd().setHanging(BigInteger.valueOf(indentHanging));
     }
 }

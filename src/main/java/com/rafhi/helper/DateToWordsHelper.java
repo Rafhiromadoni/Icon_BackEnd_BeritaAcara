@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
+// import com.github.axet.lookup.common.ImageBinaryGrey;
+
 public class DateToWordsHelper {
     private final LocalDate date;
 
@@ -56,5 +58,11 @@ public class DateToWordsHelper {
         } else {
             return Integer.toString(number);
         }
+    }
+
+    public String getFormattedDate() {
+        // d-MMMM-yyyy akan menghasilkan format seperti "1-Juli-2025"
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id-ID"));
+        return date.format(formatter);
     }
 }
