@@ -14,6 +14,8 @@ public class BeritaAcaraHistory extends PanacheEntity {
     public String judulPekerjaan;
     public LocalDateTime generationTimestamp;
 
+    public String username; // Menyimpan username yang membuat berita acara
+
     @Column(columnDefinition = "TEXT")
     public String requestJson; // Menyimpan seluruh data request sebagai JSON
 

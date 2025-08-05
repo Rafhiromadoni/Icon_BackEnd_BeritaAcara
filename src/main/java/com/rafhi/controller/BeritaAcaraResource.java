@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import io.quarkus.security.Authenticated;
 
 // Impor Jsoup
 import org.jsoup.Jsoup;
@@ -52,13 +53,18 @@ import java.time.LocalDateTime;
 import com.rafhi.dto.HistoryResponseDTO;
 import java.util.stream.Collectors;
 import jakarta.ws.rs.PathParam;
+import io.quarkus.security.identity.SecurityIdentity;
 
 @Path("/berita-acara")
 @ApplicationScoped
+@Authenticated
 public class BeritaAcaraResource {
 
     @Inject
     Jsonb jsonb; // Suntikkan JSON-B untuk konversi ke JSON
+
+    @Inject
+    SecurityIdentity securityIdentity; // Untuk mendapatkan informasi pengguna yang sedang login
 
     @POST
     @Path("/generate-docx")
@@ -112,6 +118,8 @@ public class BeritaAcaraResource {
 
             // --- LOGIKA BARU: Simpan ke History ---
             BeritaAcaraHistory history = new BeritaAcaraHistory();
+
+            history.username = securityIdentity.getPrincipal().getName(); // Simpan username yang membuat berita acara
             history.nomorBA = request.nomorBA;
             history.jenisBeritaAcara = request.jenisBeritaAcara;
             history.judulPekerjaan = request.judulPekerjaan;
@@ -135,8 +143,13 @@ public class BeritaAcaraResource {
     @Produces("application/json")
     @Transactional // Pastikan ini juga dalam konteks transaksi
     public Response getHistory() {
-        // Ambil semua data dari database
-        List<BeritaAcaraHistory> historyList = BeritaAcaraHistory.listAll();
+        String currentUsername = securityIdentity.getPrincipal().getName();
+        
+        // Ambil data histori HANYA untuk pengguna ini
+        List<BeritaAcaraHistory> historyList = BeritaAcaraHistory.find("username", currentUsername).list();
+        
+        // // Ambil semua data dari database
+        // List<BeritaAcaraHistory> historyList = BeritaAcaraHistory.listAll();
 
         // Ubah list entity menjadi list DTO
         List<HistoryResponseDTO> responseList = historyList.stream()
@@ -297,7 +310,20 @@ public class BeritaAcaraResource {
                     
     //                 // Lakukan penggantian
     //                 String newText = accumulatedText.replace(placeholder, entry.getValue());
-    //                 runs.get(startRunIndex).setText(newText, 0);
+    //                 // runs.get(startRunIndex).setText(newText, 0);
+
+    //                 XWPFRun firstRun = runs.get(startRunIndex);
+    //                 if (newText.contains("\n")) {
+    //                     String[] lines = newText.split("\n");
+    //                     for (i = 0; i < lines.length; i++) {
+    //                         firstRun.setText(lines[i]);
+    //                         if (i < lines.length - 1) {
+    //                             firstRun.addBreak();
+    //                         }
+    //                     }
+    //                 } else {
+    //                     firstRun.setText(newText, 0);
+    //                 }
 
     //                 // Kosongkan run lain yang terlibat
     //                 for (int j = startRunIndex + 1; j <= endRunIndex; j++) {
@@ -315,68 +341,322 @@ public class BeritaAcaraResource {
     //             }
     //         }
     //     }
+    // } 
+
+    /**
+     * Metode pengganti placeholder final yang dapat menangani placeholder terpisah,
+     * menjaga style, dan menangani baris baru (\n).
+     */
+    // private void replaceInParagraph(XWPFParagraph paragraph, Map<String, String> replacements) {
+    //     for (Map.Entry<String, String> entry : replacements.entrySet()) {
+    //         String placeholder = entry.getKey();
+    //         if (!paragraph.getText().contains(placeholder)) {
+    //             continue;
+    //         }
+
+    //         List<XWPFRun> runs = paragraph.getRuns();
+    //         if (runs == null || runs.isEmpty()) continue;
+
+    //         // Cari sekuens "run" yang berisi placeholder lengkap
+    //         for (int i = 0; i < runs.size(); i++) {
+    //             StringBuilder accumulatedText = new StringBuilder();
+    //             int startRunIndex = i;
+                
+    //             for (int j = i; j < runs.size(); j++) {
+    //                 XWPFRun currentRun = runs.get(j);
+    //                 String runText = currentRun.getText(0);
+    //                 if (runText != null) {
+    //                     accumulatedText.append(runText);
+    //                 }
+                    
+    //                 if (accumulatedText.toString().contains(placeholder)) {
+    //                     int endRunIndex = j;
+    //                     String replacement = entry.getValue();
+    //                     String newText = accumulatedText.toString().replace(placeholder, replacement);
+                        
+    //                     XWPFRun firstRun = runs.get(startRunIndex);
+
+    //                     // --- LOGIKA BARU UNTUK MENANGANI '\n' ---
+    //                     if (newText.contains("\n")) {
+    //                         String[] lines = newText.split("\n");
+    //                         firstRun.setText(lines[0], 0); // Set baris pertama
+    //                         for (int k = 1; k < lines.length; k++) {
+    //                             firstRun.addBreak(); // Tambahkan baris baru
+    //                             firstRun.setText(lines[k]); // Set teks baris berikutnya
+    //                         }
+    //                     } else {
+    //                         firstRun.setText(newText, 0); // Jika tidak ada baris baru
+    //                     }
+                        
+    //                     // Kosongkan run lain yang terlibat
+    //                     for (int k = startRunIndex + 1; k <= endRunIndex; k++) {
+    //                         runs.get(k).setText("", 0);
+    //                     }
+                        
+    //                     // Ulangi proses untuk placeholder yang sama di paragraf yang sama
+    //                     replaceInParagraph(paragraph, replacements);
+    //                     return;
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+
+    // private void replaceInParagraph(XWPFParagraph paragraph, Map<String, String> replacements) {
+    //     String paragraphText = paragraph.getText();
+    //     if (paragraphText == null || !paragraphText.contains("$")) {
+    //         return;
+    //     }
+
+    //     List<XWPFRun> runs = paragraph.getRuns();
+    //     if (runs == null || runs.isEmpty()) {
+    //         return;
+    //     }
+
+    //     for (Map.Entry<String, String> entry : replacements.entrySet()) {
+    //         String placeholder = entry.getKey();
+    //         if (paragraph.getText().contains(placeholder)) {
+    //             // Cari sekuens "run" yang berisi placeholder lengkap
+    //             for (int i = 0; i < runs.size(); i++) {
+    //                 StringBuilder accumulatedText = new StringBuilder();
+    //                 int startIndex = i;
+                    
+    //                 for (int j = i; j < runs.size(); j++) {
+    //                     String runText = runs.get(j).getText(0);
+    //                     if (runText != null) {
+    //                         accumulatedText.append(runText);
+    //                     }
+                        
+    //                     if (accumulatedText.toString().contains(placeholder)) {
+    //                         int endRunIndex = j;
+    //                         String replacement = entry.getValue();
+    //                         String newText = accumulatedText.toString().replace(placeholder, replacement);
+                            
+    //                         XWPFRun firstRun = runs.get(startIndex);
+
+    //                         // --- LOGIKA BARU UNTUK MENANGANI '\n' ---
+    //                         if (newText.contains("\n")) {
+    //                             String[] lines = newText.split("\n");
+    //                             firstRun.setText(lines[0], 0); // Set baris pertama
+    //                             for (int k = 1; k < lines.length; k++) {
+    //                                 firstRun.addBreak(); // Tambahkan baris baru
+    //                                 firstRun.setText(lines[k]); // Set teks baris berikutnya
+    //                             }
+    //                         } else {
+    //                             firstRun.setText(newText, 0); // Jika tidak ada baris baru
+    //                         }
+                            
+    //                         // Kosongkan run lain yang terlibat
+    //                         for (int k = startIndex + 1; k <= endRunIndex; k++) {
+    //                             runs.get(k).setText("", 0);
+    //                         }
+                            
+    //                         // Ulangi proses untuk placeholder yang sama di paragraf yang sama
+    //                         replaceInParagraph(paragraph, replacements);
+    //                         return;
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
     // }
 
     private void replaceInParagraph(XWPFParagraph paragraph, Map<String, String> replacements) {
-        String originalParagraphText = paragraph.getText();
-        if (originalParagraphText == null || !originalParagraphText.contains("$")) {
-            return;
-        }
-
-        String modifiedText = originalParagraphText;
-        boolean hasReplacements = false;
+        // Loop melalui setiap placeholder dan nilainya
         for (Map.Entry<String, String> entry : replacements.entrySet()) {
-            if (modifiedText.contains(entry.getKey())) {
-                modifiedText = modifiedText.replace(entry.getKey(), entry.getValue());
-                hasReplacements = true;
-            }
-        }
+            String placeholder = entry.getKey();
+            String replacement = entry.getValue();
 
-        if (hasReplacements) {
-            // Simpan semua style dari run yang ada
-            List<Map<String, Object>> runStyles = new ArrayList<>();
-            for (XWPFRun run : paragraph.getRuns()) {
-                Map<String, Object> style = new HashMap<>();
-                style.put("bold", run.isBold());
-                style.put("italic", run.isItalic());
-                style.put("fontFamily", run.getFontFamily());
-                if (run.getFontSize() != -1) {
-                    style.put("fontSize", run.getFontSize());
-                }
-                runStyles.add(style);
+            // Cek apakah placeholder ada di dalam teks paragraf
+            if (!paragraph.getText().contains(placeholder)) {
+                continue;
             }
 
-            // Hapus semua run lama
-            while(paragraph.getRuns().size() > 0) {
-                paragraph.removeRun(0);
-            }
-            
-            // Buat run baru dan terapkan style dari run pertama yang asli
-            XWPFRun newRun = paragraph.createRun();
-            if (modifiedText.contains("\n")) {
-                String[] lines = modifiedText.split("\n");
-                for (int i = 0; i < lines.length; i++) {
-                    newRun.setText(lines[i]);
-                    if (i < lines.length - 1) {
-                        newRun.addBreak();
+            List<XWPFRun> runs = paragraph.getRuns();
+            int startRun = -1, endRun = -1;
+            String accumulatedText = "";
+
+            // Cari sekuens "run" yang membentuk placeholder lengkap
+            for (int i = 0; i < runs.size(); i++) {
+                String runText = runs.get(i).getText(0);
+                if (runText == null) continue;
+
+                if (startRun == -1) {
+                    if (runText.contains("$")) {
+                        startRun = i;
+                        accumulatedText = runText;
                     }
+                } else {
+                    accumulatedText += runText;
                 }
-            } else {
-                newRun.setText(modifiedText);
-            }
 
-            if (!runStyles.isEmpty()) {
-                Map<String, Object> firstStyle = runStyles.get(0);
-                newRun.setBold((Boolean) firstStyle.getOrDefault("bold", false));
-                newRun.setItalic((Boolean) firstStyle.getOrDefault("italic", false));
-                newRun.setFontFamily((String) firstStyle.get("fontFamily"));
-                if (firstStyle.containsKey("fontSize")) {
-                    newRun.setFontSize((Integer) firstStyle.get("fontSize"));
+                if (startRun != -1) {
+                    if (accumulatedText.contains(placeholder)) {
+                        endRun = i;
+                        
+                        // Simpan style dari run pertama yang memulai placeholder
+                        XWPFRun styleRun = runs.get(startRun);
+
+                        // Lakukan penggantian
+                        String newText = accumulatedText.replace(placeholder, replacement);
+                        
+                        // Set teks di run pertama
+                        XWPFRun firstRun = runs.get(startRun);
+                        
+                        // Terapkan logika untuk baris baru (\n)
+                        if (newText.contains("\n")) {
+                            String[] lines = newText.split("\n");
+                            firstRun.setText(lines[0], 0);
+                            for (int k = 1; k < lines.length; k++) {
+                                firstRun.addBreak();
+                                firstRun.setText(lines[k]);
+                            }
+                        } else {
+                            firstRun.setText(newText, 0);
+                        }
+
+                        // Terapkan kembali style asli
+                        firstRun.setBold(styleRun.isBold());
+                        firstRun.setItalic(styleRun.isItalic());
+                        firstRun.setFontFamily(styleRun.getFontFamily());
+                        // Tambahkan properti style lain jika perlu
+
+                        // Kosongkan run sisa yang membentuk placeholder
+                        for (int k = startRun + 1; k <= endRun; k++) {
+                            runs.get(k).setText("", 0);
+                        }
+                        
+                        // Ulangi proses karena struktur paragraf telah berubah
+                        replaceInParagraph(paragraph, replacements);
+                        return;
+                    } else if (!placeholder.startsWith(accumulatedText)) {
+                        // Reset jika akumulasi teks tidak cocok dengan awal placeholder
+                        startRun = -1;
+                        accumulatedText = "";
+                    }
                 }
             }
         }
     }
+
+    // private void replaceInParagraph(XWPFParagraph paragraph, Map<String, String> replacements) {
+    //     String originalParagraphText = paragraph.getText();
+    //     if (originalParagraphText == null || !originalParagraphText.contains("$")) {
+    //         return;
+    //     }
+
+    //     String modifiedText = originalParagraphText;
+    //     boolean hasReplacements = false;
+    //     for (Map.Entry<String, String> entry : replacements.entrySet()) {
+    //         if (modifiedText.contains(entry.getKey())) {
+    //             modifiedText = modifiedText.replace(entry.getKey(), entry.getValue());
+    //             hasReplacements = true;
+    //         }
+    //     }
+
+    //     if (hasReplacements) {
+    //         // Simpan semua style dari run yang ada
+    //         List<Map<String, Object>> runStyles = new ArrayList<>();
+    //         for (XWPFRun run : paragraph.getRuns()) {
+    //             Map<String, Object> style = new HashMap<>();
+    //             style.put("bold", run.isBold());
+    //             style.put("italic", run.isItalic());
+    //             style.put("fontFamily", run.getFontFamily());
+    //             if (run.getFontSize() != -1) {
+    //                 style.put("fontSize", run.getFontSize());
+    //             }
+    //             runStyles.add(style);
+    //         }
+
+    //         // Hapus semua run lama
+    //         while(paragraph.getRuns().size() > 0) {
+    //             paragraph.removeRun(0);
+    //         }
+            
+    //         // Buat run baru dan terapkan style dari run pertama yang asli
+    //         XWPFRun newRun = paragraph.createRun();
+    //         if (modifiedText.contains("\n")) {
+    //             String[] lines = modifiedText.split("\n");
+    //             for (int i = 0; i < lines.length; i++) {
+    //                 newRun.setText(lines[i]);
+    //                 if (i < lines.length - 1) {
+    //                     newRun.addBreak();
+    //                 }
+    //             }
+    //         } else {
+    //             newRun.setText(modifiedText);
+    //         }
+
+    //         if (!runStyles.isEmpty()) {
+    //             Map<String, Object> firstStyle = runStyles.get(0);
+    //             newRun.setBold((Boolean) firstStyle.getOrDefault("bold", false));
+    //             newRun.setItalic((Boolean) firstStyle.getOrDefault("italic", false));
+    //             newRun.setFontFamily((String) firstStyle.get("fontFamily"));
+    //             if (firstStyle.containsKey("fontSize")) {
+    //                 newRun.setFontSize((Integer) firstStyle.get("fontSize"));
+    //             }
+    //         }
+    //     }
+    // }
     
+    // private void replaceInParagraph(XWPFParagraph paragraph, Map<String, String> replacements) {
+    //     String originalParagraphText = paragraph.getText();
+    //     // Keluar cepat jika tidak ada simbol placeholder
+    //     if (originalParagraphText == null || !originalParagraphText.contains("$")) {
+    //         return;
+    //     }
+
+    //     // Simpan style dari run pertama untuk diterapkan kembali nanti
+    //     XWPFRun styleRun = null;
+    //     if (!paragraph.getRuns().isEmpty()) {
+    //         styleRun = paragraph.getRuns().get(0);
+    //     }
+
+    //     // Lakukan semua penggantian pada teks yang sudah digabungkan
+    //     String modifiedText = originalParagraphText;
+    //     for (Map.Entry<String, String> entry : replacements.entrySet()) {
+    //         if (modifiedText.contains(entry.getKey())) {
+    //             modifiedText = modifiedText.replace(entry.getKey(), entry.getValue());
+    //         }
+    //     }
+
+    //     // Jika ada perubahan, hapus semua run lama dan buat satu run baru
+    //     if (!originalParagraphText.equals(modifiedText)) {
+    //         // Hapus semua run lama
+    //         while(paragraph.getRuns().size() > 0) {
+    //             paragraph.removeRun(0);
+    //         }
+
+    //         XWPFRun newRun = paragraph.createRun();
+
+    //         // Cek apakah teks mengandung baris baru
+    //         if (modifiedText.contains("\n")) {
+    //             String[] lines = modifiedText.split("\n");
+    //             for (int i = 0; i < lines.length; i++) {
+    //                 newRun.setText(lines[i]);
+    //                 if (i < lines.length - 1) { // Jangan tambahkan break setelah baris terakhir
+    //                     newRun.addBreak();
+    //                 }
+    //             }
+    //         } else {
+    //             newRun.setText(modifiedText);
+    //         }
+
+    //         // Terapkan kembali style dari run pertama yang disimpan
+    //         if (styleRun != null) {
+    //             newRun.setBold(styleRun.isBold());
+    //             newRun.setItalic(styleRun.isItalic());
+    //             newRun.setUnderline(styleRun.getUnderline());
+    //             newRun.setColor(styleRun.getColor());
+    //             newRun.setFontFamily(styleRun.getFontFamily());
+    //             double fontSize = styleRun.getFontSizeAsDouble();
+    //             if (fontSize > 0) {
+    //                 newRun.setFontSize((int)Math.round(fontSize));
+    //             }
+    //         }
+    //     }
+    // }
+
     private void replacePlaceholderWithHtml(XWPFDocument document, String placeholder, String html) {
         for (XWPFTable table : document.getTables()) {
             for (XWPFTableRow row : table.getRows()) {
