@@ -1,59 +1,55 @@
 package com.rafhi.controller;
 
-import com.rafhi.dto.BeritaAcaraRequest;
-import com.rafhi.dto.Fitur;
-import com.rafhi.dto.Signatory;
-import com.rafhi.helper.DateToWordsHelper;
-import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.POST;
-import jakarta.ws.rs.Path;
-import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.Response.ResponseBuilder;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.math.BigInteger;
-import java.util.ArrayList;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import io.quarkus.security.Authenticated;
+import java.util.stream.Collectors;
 
-// Impor Jsoup
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.nodes.Node;
-import org.jsoup.nodes.TextNode;
-
-// Impor Apache POI
+import org.apache.poi.xwpf.usermodel.LineSpacingRule;
+import org.apache.poi.xwpf.usermodel.XWPFAbstractNum;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFNumbering;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFRun;
 import org.apache.poi.xwpf.usermodel.XWPFTable;
 import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.apache.poi.xwpf.usermodel.XWPFTableRow;
-import org.apache.poi.xwpf.usermodel.XWPFNumbering;
-import org.apache.poi.xwpf.usermodel.LineSpacingRule;
-import org.apache.poi.xwpf.usermodel.XWPFAbstractNum;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTAbstractNum;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTLvl;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.STNumberFormat;
 
-// Impor untuk histori
+import com.rafhi.dto.BeritaAcaraRequest;
+import com.rafhi.dto.Fitur;
+import com.rafhi.dto.HistoryResponseDTO;
+import com.rafhi.dto.Signatory;
 import com.rafhi.entity.BeritaAcaraHistory;
+import com.rafhi.helper.DateToWordsHelper;
+
+import io.quarkus.security.Authenticated;
+import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.json.bind.Jsonb;
 import jakarta.transaction.Transactional;
-import java.time.LocalDateTime;
-import com.rafhi.dto.HistoryResponseDTO;
-import java.util.stream.Collectors;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
-import io.quarkus.security.identity.SecurityIdentity;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.ResponseBuilder;
 
 @Path("/berita-acara")
 @ApplicationScoped
@@ -61,16 +57,16 @@ import io.quarkus.security.identity.SecurityIdentity;
 public class BeritaAcaraResource {
 
     @Inject
-    Jsonb jsonb; // Suntikkan JSON-B untuk konversi ke JSON
+    Jsonb jsonb; 
 
     @Inject
-    SecurityIdentity securityIdentity; // Untuk mendapatkan informasi pengguna yang sedang login
+    SecurityIdentity securityIdentity; 
 
     @POST
     @Path("/generate-docx")
     @Produces("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
     @Consumes("application/json")
-    @Transactional // Tambahkan anotasi ini untuk memastikan operasi database dilakukan dalam konteks transaksi
+    @Transactional 
     public Response generateDocx(BeritaAcaraRequest request) throws Exception {
         String templateFileName;
 
@@ -99,13 +95,10 @@ public class BeritaAcaraResource {
         }
 
         try (XWPFDocument document = new XWPFDocument(templateInputStream)) {
-            // Langkah 1: Siapkan data pengganti
             Map<String, String> replacements = buildReplacementsMap(request);
 
-            // Langkah 2: Ganti semua placeholder teks biasa
             replaceTextPlaceholders(document, replacements);
 
-            // Langkah 3: Ganti placeholder deskripsi fitur dengan konten HTML secara khusus
             if ("UAT".equalsIgnoreCase(request.jenisBeritaAcara) && request.fiturList != null && !request.fiturList.isEmpty()) {
                 Fitur fitur = request.fiturList.get(0); // Mengambil fitur pertama
                 replacePlaceholderWithHtml(document, "${fitur.deskripsi}", fitur.deskripsi);
@@ -114,9 +107,7 @@ public class BeritaAcaraResource {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             document.write(out);
 
-            byte[] docxBytes = out.toByteArray(); // Simpan hasil docx ke variabel
-
-            // --- LOGIKA BARU: Simpan ke History ---
+            byte[] docxBytes = out.toByteArray();
             BeritaAcaraHistory history = new BeritaAcaraHistory();
 
             history.username = securityIdentity.getPrincipal().getName(); // Simpan username yang membuat berita acara
@@ -127,13 +118,12 @@ public class BeritaAcaraResource {
             history.requestJson = jsonb.toJson(request); // Ubah request menjadi string JSON
             history.fileContent = docxBytes; // Simpan file
 
-            // Di dalam metode generateDocx di BeritaAcaraResource.java
-            history.persistAndFlush(); // Gunakan persistAndFlush untuk mendapatkan ID segera
+            history.persistAndFlush(); 
 
             ResponseBuilder response = Response.ok(new ByteArrayInputStream(docxBytes));
             response.header("Content-Disposition", "inline; filename=BA-" + request.nomorBA + ".docx");
             response.header("X-History-ID", history.id); // Tambahkan header ini
-            response.header("Access-Control-Expose-Headers", "X-History-ID"); // Agar bisa dibaca frontend
+            response.header("Access-Control-Expose-Headers", "X-History-ID"); 
             return response.build();
         }
     }
@@ -145,21 +135,14 @@ public class BeritaAcaraResource {
     public Response getHistory() {
         String currentUsername = securityIdentity.getPrincipal().getName();
         
-        // Ambil data histori HANYA untuk pengguna ini
         List<BeritaAcaraHistory> historyList = BeritaAcaraHistory.find("username", currentUsername).list();
         
-        // // Ambil semua data dari database
-        // List<BeritaAcaraHistory> historyList = BeritaAcaraHistory.listAll();
-
-        // Ubah list entity menjadi list DTO
         List<HistoryResponseDTO> responseList = historyList.stream()
             .map(h -> new HistoryResponseDTO(h.id, h.nomorBA, h.jenisBeritaAcara, h.judulPekerjaan, h.generationTimestamp))
             .collect(Collectors.toList());
 
         return Response.ok(responseList).build();
     }
-
-    // Tambahkan metode ini di dalam kelas BeritaAcaraResource.java
 
     @GET
     @Path("/history/{id}/file")
@@ -256,10 +239,7 @@ public class BeritaAcaraResource {
         return replacements;
     }
     
-    /**
-     * Metode pengganti placeholder yang menggabungkan semua teks dalam paragraf,
-     * melakukan replace, lalu menulisnya kembali dengan menjaga style.
-     */
+
     private void replaceTextPlaceholders(XWPFDocument document, Map<String, String> replacements) {
         for (XWPFParagraph p : document.getParagraphs()) {
             replaceInParagraph(p, replacements);
@@ -462,12 +442,10 @@ public class BeritaAcaraResource {
     // }
 
     private void replaceInParagraph(XWPFParagraph paragraph, Map<String, String> replacements) {
-        // Loop melalui setiap placeholder dan nilainya
         for (Map.Entry<String, String> entry : replacements.entrySet()) {
             String placeholder = entry.getKey();
             String replacement = entry.getValue();
 
-            // Cek apakah placeholder ada di dalam teks paragraf
             if (!paragraph.getText().contains(placeholder)) {
                 continue;
             }
@@ -476,7 +454,6 @@ public class BeritaAcaraResource {
             int startRun = -1, endRun = -1;
             String accumulatedText = "";
 
-            // Cari sekuens "run" yang membentuk placeholder lengkap
             for (int i = 0; i < runs.size(); i++) {
                 String runText = runs.get(i).getText(0);
                 if (runText == null) continue;
@@ -494,16 +471,12 @@ public class BeritaAcaraResource {
                     if (accumulatedText.contains(placeholder)) {
                         endRun = i;
                         
-                        // Simpan style dari run pertama yang memulai placeholder
                         XWPFRun styleRun = runs.get(startRun);
 
-                        // Lakukan penggantian
                         String newText = accumulatedText.replace(placeholder, replacement);
                         
-                        // Set teks di run pertama
                         XWPFRun firstRun = runs.get(startRun);
                         
-                        // Terapkan logika untuk baris baru (\n)
                         if (newText.contains("\n")) {
                             String[] lines = newText.split("\n");
                             firstRun.setText(lines[0], 0);
@@ -515,22 +488,16 @@ public class BeritaAcaraResource {
                             firstRun.setText(newText, 0);
                         }
 
-                        // Terapkan kembali style asli
                         firstRun.setBold(styleRun.isBold());
                         firstRun.setItalic(styleRun.isItalic());
                         firstRun.setFontFamily(styleRun.getFontFamily());
-                        // Tambahkan properti style lain jika perlu
-
-                        // Kosongkan run sisa yang membentuk placeholder
                         for (int k = startRun + 1; k <= endRun; k++) {
                             runs.get(k).setText("", 0);
                         }
                         
-                        // Ulangi proses karena struktur paragraf telah berubah
                         replaceInParagraph(paragraph, replacements);
                         return;
                     } else if (!placeholder.startsWith(accumulatedText)) {
-                        // Reset jika akumulasi teks tidak cocok dengan awal placeholder
                         startRun = -1;
                         accumulatedText = "";
                     }
@@ -675,7 +642,6 @@ public class BeritaAcaraResource {
                             while (paragraph.getRuns().size() > 0) {
                                 paragraph.removeRun(0);
                             }
-                            // Hapus paragraf kosong yang menjadi placeholder
                             cell.removeParagraph(p);
 
                             Document htmlDoc = Jsoup.parse(html);
@@ -695,7 +661,6 @@ public class BeritaAcaraResource {
                                         XWPFParagraph listParagraph = cell.addParagraph();
                                         listParagraph.setNumID(numId);
 
-                                        // indentasi
                                         int indentLevel = 0;
                                         if (li.hasClass("ql-indent-1")) indentLevel = 1;
                                         if (li.hasClass("ql-indent-2")) indentLevel = 2;
@@ -705,7 +670,6 @@ public class BeritaAcaraResource {
                                         listParagraph.setSpacingBefore(60);
                                         listParagraph.setSpacingBetween(1.0, LineSpacingRule.AUTO);
                                         listParagraph.setNumILvl(BigInteger.valueOf(indentLevel));
-                                        // Terapkan style font
                                         applyRuns(listParagraph, li, fontFamily, fontSize);
                                     }
                                 }
@@ -718,11 +682,9 @@ public class BeritaAcaraResource {
         }
     }
     
-    // 2. Modifikasi applyRuns untuk menerima properti style
     private void applyRuns(XWPFParagraph paragraph, Element element, String fontFamily, int fontSize) {
         for (Node node : element.childNodes()) {
             XWPFRun run = paragraph.createRun();
-            // Terapkan style dasar
             if (fontFamily != null) run.setFontFamily(fontFamily);
             if (fontSize != -1) run.setFontSize(fontSize);
 
@@ -744,19 +706,15 @@ public class BeritaAcaraResource {
         }
     }
     
-    // **PERBAIKAN: Membuat definisi multi-level numbering**
     private BigInteger createNumbering(XWPFNumbering numbering, String listType) {
         CTAbstractNum cTAbstractNum = CTAbstractNum.Factory.newInstance();
-        // Beri ID unik untuk setiap definisi numbering baru
         cTAbstractNum.setAbstractNumId(BigInteger.valueOf(System.currentTimeMillis() % 100000));
 
         if ("ul".equals(listType)) {
-            // Definisi untuk bullet list multi-level
             addNumberingLevel(cTAbstractNum, 0, STNumberFormat.BULLET, "-");
             addNumberingLevel(cTAbstractNum, 1, STNumberFormat.BULLET, "-");
             addNumberingLevel(cTAbstractNum, 2, STNumberFormat.BULLET, "-");
         } else { // "ol"
-            // Definisi untuk ordered list multi-level
             addNumberingLevel(cTAbstractNum, 0, STNumberFormat.DECIMAL, "%1.");
             addNumberingLevel(cTAbstractNum, 1, STNumberFormat.BULLET, "-");
             addNumberingLevel(cTAbstractNum, 2, STNumberFormat.BULLET, "-");
@@ -767,7 +725,6 @@ public class BeritaAcaraResource {
         return numbering.addNum(abstractNumId);
     }
 
-    // Helper baru untuk menambahkan level ke definisi numbering
     private void addNumberingLevel(CTAbstractNum abstractNum, int level, STNumberFormat.Enum format, String lvlText) {
         CTLvl cTLvl = abstractNum.addNewLvl();
         cTLvl.setIlvl(BigInteger.valueOf(level));
@@ -775,25 +732,24 @@ public class BeritaAcaraResource {
         cTLvl.addNewLvlText().setVal(lvlText);
         cTLvl.addNewStart().setVal(BigInteger.valueOf(1));
 
-         // Atur indentasi spesifik untuk setiap level
         long indentLeft, indentRight, indentHanging;
         switch (level) {
-            case 0:  // Level pertama
+            case 0:  
                 indentLeft = 512L;
                 indentRight = 43L; 
                 indentHanging = 360L; 
                 break;
-            case 1:  // Level kedua
+            case 1:  
                 indentLeft = 945L;
                 indentRight = 43L;
                 indentHanging = 288L; 
                 break;
-            case 2:  // Level ketiga
+            case 2:  
                 indentLeft = 1200L;
                 indentRight = 43L;
                 indentHanging = 288L;
                 break;
-            default: // Level selanjutnya
+            default: 
                 indentLeft = 1200L;
                 indentRight = 43L;
                 indentHanging = 288L;
