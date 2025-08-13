@@ -1,16 +1,24 @@
 package com.rafhi.helper;
 
 import java.time.LocalDate;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
 // import com.github.axet.lookup.common.ImageBinaryGrey;
 
 public class DateToWordsHelper {
-    private final LocalDate date;
+    private LocalDate date;
 
     public DateToWordsHelper(String dateStr) {
-        this.date = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        // Coba parsing format ISO 8601 (YYYY-MM-DDTHH:mm:ss.sssZ) terlebih dahulu
+        try {
+            ZonedDateTime zdt = ZonedDateTime.parse(dateStr);
+            this.date = zdt.toLocalDate();
+        } catch (java.time.format.DateTimeParseException e) {
+            // Jika gagal, coba parsing format YYYY-MM-DD sebagai fallback
+            this.date = LocalDate.parse(dateStr);
+        }
     }
 
     public String getDayOfWeek() {
