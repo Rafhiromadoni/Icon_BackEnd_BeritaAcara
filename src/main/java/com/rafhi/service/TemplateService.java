@@ -6,6 +6,7 @@ import jakarta.transaction.Transactional;
 import jakarta.ws.rs.NotFoundException;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.apache.poi.xwpf.usermodel.*;
+import org.hibernate.Hibernate; // <-- PERUBAHAN: Import ditambahkan
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -27,10 +28,34 @@ public class TemplateService {
 
     private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{([^}]+)\\}");
 
-    public List<Template> listAllActive() { return Template.list("isActive", true); }
-    public List<Template> listAllForAdmin() { return Template.listAll(); }
-    public Template findById(Long id) { return Template.findById(id); }
-    public Path getTemplatePath(Template template) { return Paths.get(uploadPath, template.fileNameStored); }
+    public List<Template> listAllActive() {
+        return Template.list("isActive", true);
+    }
+
+    public List<Template> listAllForAdmin() {
+        return Template.listAll();
+    }
+
+    public Template findById(Long id) {
+        return Template.findById(id);
+    }
+
+    // <-- PERUBAHAN: Method baru ditambahkan di sini -->
+    @Transactional
+    public Template findByIdWithPlaceholders(Long id) {
+        Template template = findById(id);
+        if (template != null) {
+            // Perintah ini memaksa Hibernate untuk memuat list placeholders
+            // dari database sebelum sesi transaksi berakhir.
+            Hibernate.initialize(template.getPlaceholders());
+        }
+        return template;
+    }
+    // <-- Akhir dari method baru -->
+
+    public Path getTemplatePath(Template template) {
+        return Paths.get(uploadPath, template.fileNameStored);
+    }
 
     public Set<String> scanPlaceholders(Path filePath) throws IOException {
         Set<String> placeholders = new HashSet<>();
