@@ -9,12 +9,16 @@ public class HistoryResponseDTO {
     public String judulPekerjaan;
     public LocalDateTime generationTimestamp;
 
-    // Constructor untuk mempermudah konversi
-    public HistoryResponseDTO(Long id, String nomorBA, String jenis, String judul, LocalDateTime timestamp) {
+    // Constructor default (tanpa argumen) sudah cukup untuk Panache .project()
+    public HistoryResponseDTO() {
+    }
+
+    // Constructor dengan argumen boleh tetap ada, tidak akan mengganggu.
+    public HistoryResponseDTO(Long id, String nomorBA, String jenisBeritaAcara, String judulPekerjaan, LocalDateTime generationTimestamp) {
         this.id = id;
         this.nomorBA = nomorBA;
-        this.jenisBeritaAcara = jenis;
-        this.judulPekerjaan = judul;
-        this.generationTimestamp = timestamp;
+        this.jenisBeritaAcara = jenisBeritaAcara;
+        this.judulPekerjaan = judulPekerjaan;
+        this.generationTimestamp = generationTimestamp;
     }
 }

@@ -523,6 +523,9 @@ import java.io.ByteArrayInputStream;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import jakarta.persistence.EntityManager; // <-- Tambahkan import ini
+import io.quarkus.panache.common.Sort; 
+
 @Path("/berita-acara")
 @ApplicationScoped
 @Authenticated
@@ -531,6 +534,7 @@ public class BeritaAcaraResource {
     @Inject SecurityIdentity securityIdentity;
     @Inject BeritaAcaraService beritaAcaraService;
     @Inject TemplateService templateService;
+    @Inject EntityManager entityManager;
     
     @GET
     @Path("/templates")
@@ -576,10 +580,19 @@ public class BeritaAcaraResource {
     @Produces(MediaType.APPLICATION_JSON)
     public Response getHistory() {
         String currentUsername = securityIdentity.getPrincipal().getName();
-        List<BeritaAcaraHistory> historyList = BeritaAcaraHistory.find("user.username", currentUsername).list();
-        List<HistoryResponseDTO> responseList = historyList.stream()
-            .map(h -> new HistoryResponseDTO(h.id, h.nomorBA, h.jenisBeritaAcara, h.judulPekerjaan, h.generationTimestamp))
-            .collect(Collectors.toList());
+        // List<BeritaAcaraHistory> historyList = BeritaAcaraHistory.find("user.username", currentUsername).list();
+
+        // 1. Buat string query JPQL yang benar
+        String jpqlQuery = "SELECT new com.rafhi.dto.HistoryResponseDTO(" +
+                           "h.id, h.nomorBA, h.jenisBeritaAcara, h.judulPekerjaan, h.generationTimestamp) " +
+                           "FROM BeritaAcaraHistory h WHERE h.user.username = :username " +
+                           "ORDER BY h.generationTimestamp DESC";
+
+        // 2. Buat query menggunakan EntityManager
+        List<HistoryResponseDTO> responseList = entityManager.createQuery(jpqlQuery, HistoryResponseDTO.class)
+                .setParameter("username", currentUsername)
+                .getResultList();
+
         return Response.ok(responseList).build();
     }
 

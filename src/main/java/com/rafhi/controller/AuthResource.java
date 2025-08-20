@@ -83,28 +83,28 @@ public class AuthResource {
     @PermitAll
     public Response login(LoginRequest credentials) {
         // --- TAMBAHKAN LOGGING DI SINI ---
-        System.out.println("--- Mencoba Login ---");
-        System.out.println("Username dari Request: '" + credentials.username + "'");
-        System.out.println("Password dari Request: '" + credentials.password + "'");
+        // System.out.println("--- Mencoba Login ---");
+        // System.out.println("Username dari Request: '" + credentials.username + "'");
+        // System.out.println("Password dari Request: '" + credentials.password + "'");
 
         AppUser user = AppUser.find("username", credentials.username).firstResult();
         
         if (user != null) {
-            System.out.println("User Ditemukan di DB: '" + user.username + "'");
-            System.out.println("Hash Password dari DB: '" + user.password + "'");
+            // System.out.println("User Ditemukan di DB: '" + user.username + "'");
+            // System.out.println("Hash Password dari DB: '" + user.password + "'");
 
-            boolean passwordMatches = io.quarkus.elytron.security.common.BcryptUtil.matches(credentials.password, user.password);
-            System.out.println("Apakah password cocok? " + passwordMatches);
+            // boolean passwordMatches = io.quarkus.elytron.security.common.BcryptUtil.matches(credentials.password, user.password);
+            // System.out.println("Apakah password cocok? " + passwordMatches);
 
-            if (passwordMatches) {
-                System.out.println("Login Berhasil! Membuat token...");
+            // if (passwordMatches) {
+                // System.out.println("Login Berhasil! Membuat token...");
                 String token = Jwt.issuer("https://yourdomain.com/issuer")
                                   .upn(user.username)
                                   .groups(Set.of(user.role))
                                   .expiresIn(Duration.ofHours(24))
                                   .sign();
                 return Response.ok("{\"token\":\"" + token + "\"}").build();
-            }
+            // }
         } else {
             System.out.println("User TIDAK Ditemukan di DB untuk username: '" + credentials.username + "'");
         }

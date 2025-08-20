@@ -1,5 +1,25 @@
 package com.rafhi.service;
 
+import com.rafhi.entity.AppUser;
+import com.rafhi.entity.BeritaAcaraHistory;
+import com.rafhi.entity.Template;
+import com.rafhi.entity.TemplatePlaceholder;
+import com.rafhi.helper.DateToWordsHelper;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.json.bind.Jsonb;
+import jakarta.transaction.Transactional;
+import jakarta.ws.rs.NotFoundException;
+import org.apache.poi.xwpf.usermodel.*;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTAbstractNum;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTLvl;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.STNumberFormat;
+
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.math.BigInteger;
@@ -11,37 +31,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
-import org.apache.poi.xwpf.usermodel.LineSpacingRule;
-import org.apache.poi.xwpf.usermodel.UnderlinePatterns;
-import org.apache.poi.xwpf.usermodel.XWPFAbstractNum;
-import org.apache.poi.xwpf.usermodel.XWPFDocument;
-import org.apache.poi.xwpf.usermodel.XWPFNumbering;
-import org.apache.poi.xwpf.usermodel.XWPFParagraph;
-import org.apache.poi.xwpf.usermodel.XWPFRun;
-import org.apache.poi.xwpf.usermodel.XWPFTable;
-import org.apache.poi.xwpf.usermodel.XWPFTableCell;
-import org.apache.poi.xwpf.usermodel.XWPFTableRow;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.nodes.Node;
-import org.jsoup.nodes.TextNode;
-import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTAbstractNum;
-import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTLvl;
-import org.openxmlformats.schemas.wordprocessingml.x2006.main.STNumberFormat;
-
-import com.rafhi.entity.AppUser;
-import com.rafhi.entity.BeritaAcaraHistory;
-import com.rafhi.entity.Template;
-import com.rafhi.entity.TemplatePlaceholder;
-import com.rafhi.helper.DateToWordsHelper;
-
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-import jakarta.json.bind.Jsonb;
-import jakarta.transaction.Transactional;
-import jakarta.ws.rs.NotFoundException;
 
 @ApplicationScoped
 public class BeritaAcaraService {
@@ -124,7 +113,7 @@ public class BeritaAcaraService {
             replacements.put("${tanggal_ba_terbilang}", helper.getDay());
             replacements.put("${bulan_ba_terbilang}", helper.getMonth());
             replacements.put("${tahun_ba_terbilang}", helper.getYear());
-            replacements.put("${tanggal_ba_lengkap}", helper.getFullDate()); // Ini adalah format DD-MM-YYYY
+            replacements.put("${tanggal_ba}", helper.getFullDate()); // Ini adalah format DD-MM-YYYY
         } 
         else if (baseNameWithSuffix.startsWith("tanggal_pengerjaan")) {
             replacements.put("${hari_pengerjaan_terbilang}", helper.getDayOfWeek());
@@ -135,7 +124,7 @@ public class BeritaAcaraService {
         }
         // Jika ada jenis tanggal lain (seperti tanggal_surat_request), tambahkan blok else if di sini
         else if (baseNameWithSuffix.startsWith("tanggal_surat_request")) {
-            replacements.put("${tanggal_surat_request}", helper.getFullDate());
+            replacements.put("${tanggal_surat_request}", helper.getFormattedDate());
         }
     }
 
@@ -263,18 +252,22 @@ public class BeritaAcaraService {
 
                             // Parse HTML dan sisipkan konten baru
                             Document htmlDoc = Jsoup.parse(html);
-                            XWPFNumbering numbering = document.getNumbering();
-                            if(numbering == null) numbering = document.createNumbering();
+                            // XWPFNumbering numbering = document.getNumbering();
+                            // if(numbering == null) numbering = document.createNumbering();
                             
                             for (Element element : htmlDoc.body().children()) {
                                 if (element.tagName().equals("p")) {
+
                                     XWPFParagraph targetParagraph = cell.addParagraph();
                                     targetParagraph.setSpacingAfter(60);
                                     targetParagraph.setSpacingBefore(240);
                                     targetParagraph.setSpacingBetween(1.0, LineSpacingRule.AUTO);
                                     applyRuns(targetParagraph, element, fontFamily, fontSize);
+
                                 } else if (element.tagName().equals("ul") || element.tagName().equals("ol")) {
-                                    BigInteger numId = createNumbering(numbering, element.tagName());
+
+                                    BigInteger numId = createNumbering(document, element.tagName());
+
                                     for (Element li : element.select("li")) {
                                         XWPFParagraph listParagraph = cell.addParagraph();
                                         listParagraph.setNumID(numId);
@@ -332,26 +325,35 @@ public class BeritaAcaraService {
      * Membuat definisi numbering baru (baik bulleted atau ordered)
      * untuk digunakan dalam list.
      */
-    private BigInteger createNumbering(XWPFNumbering numbering, String listType) {
-        CTAbstractNum cTAbstractNum = CTAbstractNum.Factory.newInstance();
-        // --- PERBAIKAN UNTUK MENDAPATKAN ID UNIK ---
-        // Gunakan ukuran list abstractNum yang sudah ada, ditambah waktu saat ini
-        // untuk memastikan ID tidak bertabrakan.
-        long uniqueId = numbering.getAbstractNums().size() + System.currentTimeMillis() % 10000;
-        cTAbstractNum.setAbstractNumId(BigInteger.valueOf(uniqueId));
-
-        if ("ul".equals(listType)) {
-            addNumberingLevel(cTAbstractNum, 0, STNumberFormat.BULLET, "•");
-            addNumberingLevel(cTAbstractNum, 1, STNumberFormat.BULLET, "o");
-            addNumberingLevel(cTAbstractNum, 2, STNumberFormat.BULLET, "▪");
-        } else { // "ol"
-            addNumberingLevel(cTAbstractNum, 0, STNumberFormat.DECIMAL, "%1.");
-            addNumberingLevel(cTAbstractNum, 1, STNumberFormat.LOWER_LETTER, "%2)");
-            addNumberingLevel(cTAbstractNum, 2, STNumberFormat.LOWER_ROMAN, "%3.");
+    private BigInteger createNumbering(XWPFDocument document, String listType) {
+        // Selalu dapatkan atau buat instance XWPFNumbering
+        XWPFNumbering numbering = document.getNumbering();
+        if (numbering == null) {
+            numbering = document.createNumbering();
         }
 
+        CTAbstractNum cTAbstractNum = CTAbstractNum.Factory.newInstance();
+        // Beri ID unik yang dijamin tidak akan bertabrakan
+        cTAbstractNum.setAbstractNumId(BigInteger.valueOf(numbering.getAbstractNums().size() + 10)); // +10 untuk keamanan
+
+        // Definisikan setiap level indentasi
+        if ("ul".equals(listType)) {
+            // Bulleted list multi-level
+            addNumberingLevel(cTAbstractNum, 0, STNumberFormat.BULLET, "-"); // Level 1: •
+            addNumberingLevel(cTAbstractNum, 1, STNumberFormat.BULLET, "-"); // Level 2: o
+            addNumberingLevel(cTAbstractNum, 2, STNumberFormat.BULLET, "-"); // Level 3: ▪
+        } else { // "ol"
+            // Ordered list multi-level
+            addNumberingLevel(cTAbstractNum, 0, STNumberFormat.DECIMAL, "%1.");       // Level 1: 1.
+            addNumberingLevel(cTAbstractNum, 1, STNumberFormat.BULLET, "-"); // Level 2: a)
+            addNumberingLevel(cTAbstractNum, 2, STNumberFormat.LOWER_ROMAN, "%3.");  // Level 3: i.
+        }
+
+        // Daftarkan definisi abstractNum ini ke dokumen
         XWPFAbstractNum abstractNum = new XWPFAbstractNum(cTAbstractNum, numbering);
         BigInteger abstractNumId = numbering.addAbstractNum(abstractNum);
+        
+        // Buat instance numbering konkret dari definisi abstract di atas
         return numbering.addNum(abstractNumId);
     }
 
@@ -359,6 +361,31 @@ public class BeritaAcaraService {
      * Helper untuk mendefinisikan setiap level indentasi dalam sebuah list,
      * termasuk format (angka, huruf, bullet) dan indentasinya.
      */
+    // private void addNumberingLevel(CTAbstractNum abstractNum, int level, STNumberFormat.Enum format, String lvlText) {
+    //     CTLvl cTLvl = abstractNum.addNewLvl();
+    //     cTLvl.setIlvl(BigInteger.valueOf(level));
+    //     cTLvl.addNewNumFmt().setVal(format);
+    //     cTLvl.addNewLvlText().setVal(lvlText);
+    //     cTLvl.addNewStart().setVal(BigInteger.valueOf(1));
+
+    //     // Atur indentasi spesifik untuk setiap level.
+    //     // Nilai dalam TWIPs (1/1440 inci). 720 TWIPs = 0.5 inci.
+    //     long hangingIndent = 360L;
+    //     long leftIndent = 720L * (level + 1); // Indentasi bertambah 0.5 inci per level
+
+    //     // Pastikan PPr ada sebelum menambahkan Ind
+    //     if (cTLvl.getPPr() == null) {
+    //         cTLvl.addNewPPr();
+    //     }
+    //     if (cTLvl.getPPr().getInd() == null) {
+    //         cTLvl.getPPr().addNewInd();
+    //     }
+        
+    //     cTLvl.getPPr().getInd().setLeft(BigInteger.valueOf(leftIndent));
+    //     cTLvl.getPPr().getInd().setHanging(BigInteger.valueOf(hangingIndent));
+    // }
+    
+    //  Helper baru untuk menambahkan level ke definisi numbering
     private void addNumberingLevel(CTAbstractNum abstractNum, int level, STNumberFormat.Enum format, String lvlText) {
         CTLvl cTLvl = abstractNum.addNewLvl();
         cTLvl.setIlvl(BigInteger.valueOf(level));
@@ -366,10 +393,32 @@ public class BeritaAcaraService {
         cTLvl.addNewLvlText().setVal(lvlText);
         cTLvl.addNewStart().setVal(BigInteger.valueOf(1));
 
-        long indentMultiplier = 720L; // 720 TWIPs = 0.5 inch
-        long hangingIndent = 360L;
-
-        cTLvl.addNewPPr().addNewInd().setLeft(BigInteger.valueOf((level + 1) * indentMultiplier));
-        cTLvl.addNewPPr().addNewInd().setHanging(BigInteger.valueOf(hangingIndent));
+         // Atur indentasi spesifik untuk setiap level
+        long indentLeft, indentRight, indentHanging;
+        switch (level) {
+            case 0:  // Level pertama
+                indentLeft = 512L;
+                indentRight = 43L; 
+                indentHanging = 360L; 
+                break;
+            case 1:  // Level kedua
+                indentLeft = 945L;
+                indentRight = 43L;
+                indentHanging = 288L; 
+                break;
+            case 2:  // Level ketiga
+                indentLeft = 1200L;
+                indentRight = 43L;
+                indentHanging = 288L;
+                break;
+            default: // Level selanjutnya
+                indentLeft = 1200L;
+                indentRight = 43L;
+                indentHanging = 288L;
+                break;
+        }
+        cTLvl.addNewPPr().addNewInd().setLeft(BigInteger.valueOf(indentLeft));
+        cTLvl.addNewPPr().addNewInd().setRight(BigInteger.valueOf(indentRight));
+        cTLvl.addNewPPr().addNewInd().setHanging(BigInteger.valueOf(indentHanging));
     }
 }
